@@ -1,0 +1,146 @@
+# SPDX-License-Identifier: MIT-0
+---
+# ------------------ UBUNTU/DEBIAN TASKS ------------------
+- name: Update apt repo and cache
+  apt:
+    update_cache: yes
+    force_apt_get: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Upgrade all packages on servers
+  apt:
+    upgrade: dist
+    force_apt_get: yes
+  when: ansible_os_family == "Debian"
+
+- name: Ensure Java 17 is absent (ES 7.x requires Java 11)
+  apt:
+    name: openjdk-17-jdk
+    state: absent
+  when: ansible_os_family == "Debian"
+
+- name: Install necessary packages on Debian/Ubuntu
+  apt:
+    name:
+      - nginx
+      - openjdk-11-jdk
+      - vim
+      - wget
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Import the Elasticsearch PGP key on Debian/Ubuntu
+  apt_key:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    keyring: /usr/share/keyrings/elasticsearch-keyring.gpg
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Add the Elasticsearch repository on Debian/Ubuntu
+  lineinfile:
+    path: /etc/apt/sources.list.d/elastic-7.x.list
+    line: "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/7.x/apt stable main"
+    create: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install Elasticsearch package on Debian/Ubuntu
+  apt:
+    name: elasticsearch
+    state: present
+    update_cache: yes
+  notify:
+    - Start Elasticsearch
+    - Enable Elasticsearch
+    - Restart Elasticsearch
+  when: ansible_os_family == "Debian"
+
+- name: Configure elasticsearch.yml on Debian/Ubuntu
+  template:
+    src: elasticsearch.yml.j2
+    dest: /etc/elasticsearch/elasticsearch.yml
+  when: ansible_os_family == "Debian"
+
+# ------------------ AMAZON LINUX TASKS ------------------
+- name: Install dependencies on Amazon Linux
+  yum:
+    name:
+      - java-11-amazon-corretto
+      - nginx
+      - wget
+      - vim
+    state: present
+  when: ansible_distribution == "Amazon"
+
+- name: Import the Elasticsearch GPG key on Amazon Linux
+  rpm_key:
+    key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    state: present
+  when: ansible_distribution == "Amazon"
+
+- name: Add Elasticsearch repo on Amazon Linux manually
+  copy:
+    dest: /etc/yum.repos.d/elasticsearch.repo
+    content: |
+      [elasticsearch-7.x]
+      name=Elasticsearch repository for 7.x packages
+      baseurl=https://artifacts.elastic.co/packages/7.x/yum
+      gpgcheck=1
+      gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+      enabled=1
+      autorefresh=1
+      type=rpm-md
+  when: ansible_distribution == "Amazon"
+
+- name: Install Elasticsearch on Amazon Linux
+  yum:
+    name: elasticsearch
+    state: present
+  notify:
+    - Start Elasticsearch
+    - Enable Elasticsearch
+    - Restart Elasticsearch
+  when: ansible_distribution == "Amazon"
+
+- name: Configure elasticsearch.yml on Amazon Linux
+  template:
+    src: elasticsearch.yml.j2
+    dest: /etc/elasticsearch/elasticsearch.yml
+  when: ansible_distribution == "Amazon"
+
+# ------------------ KIBANA INSTALLATION (Common) ------------------
+- name: Install Kibana on Debian/Ubuntu
+  apt:
+    name: kibana
+    state: present
+    update_cache: yes
+  notify:
+    - Start Kibana
+    - Enable Kibana
+    - Restart Kibana
+  when: ansible_os_family == "Debian"
+
+- name: Install Kibana on Amazon Linux
+  yum:
+    name: kibana
+    state: present
+  notify:
+    - Start Kibana
+    - Enable Kibana
+    - Restart Kibana
+  when: ansible_distribution == "Amazon"
+
+- name: Configure kibana.yml from template
+  template:
+    src: kibana.yml.j2
+    dest: /etc/kibana/kibana.yml
+  notify:
+    - Restart Kibana
+
+# ------------------ SYSTEM SETTINGS FOR ELASTICSEARCH ------------------
+- name: Ensure vm.max_map_count is set for Elasticsearch
+  sysctl:
+    name: vm.max_map_count
+    value: 262144
+    state: present
+    reload: yes

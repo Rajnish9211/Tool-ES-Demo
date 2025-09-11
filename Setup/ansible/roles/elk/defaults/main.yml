@@ -1,0 +1,5 @@
+---
+elasticsearch_version: "7.17.24"
+elasticsearch_url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ elasticsearch_version }}-amd64.deb"
+kibana_version: "7.17.24"
+kibana_url: "https://artifacts.elastic.co/downloads/kibana/kibana-{{ kibana_version }}-amd64.deb"
