@@ -1,0 +1,251 @@
+pipeline {
+  agent any
+
+  // Choice parameter for Build or Destroy
+  parameters {
+    choice(name: 'ACTION', choices: ['build', 'destroy'], description: 'Select action: build or destroy')
+    // ✅ Pre-CI/CD boolean toggles
+  booleanParam(name: 'CHECK_TERRAFORM', defaultValue: true, description: 'Run Terraform fmt')
+  booleanParam(name: 'CHECK_ANSIBLE', defaultValue: true, description: 'Run Ansible syntax + lint')
+  booleanParam(name: 'CHECK_GITLEAKS', defaultValue: false, description: 'Run gitleaks secrets scan')
+  booleanParam(name: 'CHECK_AWS', defaultValue: true, description: 'Verify AWS CLI authentication')
+  }
+
+  environment {
+    AWS_REGION   = 'ap-south-1'
+    SSH_KEY_PATH = '/var/lib/jenkins/.ssh/oneclick.pem'   // local key on Jenkins box
+    SSH_CONFIG   = "${WORKSPACE}/.ssh_config"
+    TF_DIR       = 'Setup/terraform'
+    ANS_DIR      = 'Setup/ansible'
+  }
+
+  options {
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+    timeout(time: 60, unit: 'MINUTES')
+    timestamps()
+  }
+
+  stages {
+    stage('Checkout Code') {
+      steps {
+        git branch: 'main', url: 'https://github.com/Rajnish9211/Tool-ES-Demo.git'
+      }
+    }
+  stage('Pre CI/CD Checks') {
+  steps {
+    script {
+      echo "===== Running Pre CI/CD validation checks ====="
+
+      // Terraform
+      if (params.CHECK_TERRAFORM) {
+        dir("${TF_DIR}") {
+          sh '''
+            echo ">>> Terraform Format Check"
+            terraform fmt -check -recursive || true
+          '''
+        }
+      } else {
+        echo "Skipping Terraform checks"
+      }
+
+      // Ansible
+      if (params.CHECK_ANSIBLE) {
+        dir("${ANS_DIR}") {
+          sh '''
+            echo ">>> Checking Ansible syntax"
+            if [ -d .venv ]; then
+              . .venv/bin/activate
+            fi
+
+            ansible-playbook --syntax-check playbook.yml || true
+
+            if command -v ansible-lint >/dev/null 2>&1; then
+              echo ">>> Running ansible-lint"
+              ansible-lint playbook.yml || true
+            else
+              echo "ansible-lint not installed, skipping lint step"
+            fi
+          '''
+        }
+      } else {
+        echo "Skipping Ansible checks"
+      }
+      // GitLeaks
+      if (params.CHECK_GITLEAKS) {
+        sh '''
+          if command -v gitleaks >/dev/null 2>&1; then
+            echo ">>> Running gitleaks"
+            gitleaks detect --source . --no-banner || true
+          else
+            echo "gitleaks not installed, skipping secrets scan"
+          fi
+        '''
+      } else {
+        echo "Skipping gitleaks check"
+      }
+
+      // AWS check
+      if (params.CHECK_AWS) {
+        sh '''
+          echo ">>> Checking AWS CLI authentication"
+          aws sts get-caller-identity --region ${AWS_REGION} || true
+        '''
+      } else {
+        echo "Skipping AWS check"
+      }
+    }
+  }
+}
+
+    stage('Terraform Init & Apply/Destroy') {
+      steps {
+        dir("${TF_DIR}") {
+          script {
+            sh 'terraform init -input=false'
+            if (params.ACTION == 'build') {
+              sh 'terraform apply -auto-approve'
+            } else if (params.ACTION == 'destroy') {
+              sh 'terraform destroy -auto-approve'
+            }
+          }
+        }
+      }
+    }
+
+    stage('Wait for EC2 instances') {
+      when {
+        expression { params.ACTION == 'build' }
+      }
+      steps {
+        echo "Waiting 120s for EC2 initialization"
+        sleep 120
+      }
+    }
+
+    stage('Build SSH Config via Bastion') {
+      when {
+        expression { params.ACTION == 'build' }
+      }
+      steps {
+        dir("${TF_DIR}") {
+          script {
+            def bastionIP = sh(script: 'terraform output -raw bastion_public_ip', returnStdout: true).trim()
+            writeFile file: "${SSH_CONFIG}", text: """
+Host bastion
+  HostName ${bastionIP}
+  User ubuntu
+  IdentityFile ${SSH_KEY_PATH}
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+Host *.compute.internal
+  User ubuntu
+  ProxyJump bastion
+  IdentityFile ${SSH_KEY_PATH}
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+"""
+            sh "chmod 600 ${SSH_CONFIG}"
+            sh 'ssh -o StrictHostKeyChecking=no -F ${SSH_CONFIG} bastion "hostname && echo OK"'
+          }
+        }
+      }
+    }
+
+    stage('Copy key to Bastion') {
+      when {
+        expression { params.ACTION == 'build' }
+      }
+      steps {
+        dir("${TF_DIR}") {
+          script {
+            def bastionIP = sh(script: 'terraform output -raw bastion_public_ip', returnStdout: true).trim()
+            sh """
+              echo "Copying key to bastion:/home/ubuntu/oneclick.pem…"
+              scp -o StrictHostKeyChecking=no -i ${SSH_KEY_PATH} ${SSH_KEY_PATH} ubuntu@${bastionIP}:/home/ubuntu/oneclick.pem
+              ssh -o StrictHostKeyChecking=no -i ${SSH_KEY_PATH} ubuntu@${bastionIP} 'chmod 600 /home/ubuntu/oneclick.pem && chown ubuntu:ubuntu /home/ubuntu/oneclick.pem && ls -l /home/ubuntu/oneclick.pem'
+            """
+          }
+        }
+      }
+    }
+
+    stage('Ansible: Setup ') {
+      when {
+        expression { params.ACTION == 'build' }
+      }
+      steps {
+        dir("${ANS_DIR}") {
+          sh '''
+            echo "Creating Python venv…"
+            python3 -m venv .venv
+            . .venv/bin/activate
+            echo "Installing Python deps…"
+            pip install --upgrade pip
+            if [ -f requirements.txt ]; then
+              pip install -r requirements.txt
+            else
+              pip install ansible boto3 botocore awscli
+            fi
+            if [ -f requirements.yml ]; then
+              ansible-galaxy collection install -r requirements.yml
+            fi
+          '''
+        }
+      }
+    }
+
+    stage('Ansible: Inventory Check ') {
+      when {
+        expression { params.ACTION == 'build' }
+      }
+      steps {
+        dir("${ANS_DIR}") {
+          sh '''
+            . .venv/bin/activate
+            export AWS_REGION=${AWS_REGION}
+            export ANSIBLE_HOST_KEY_CHECKING=False
+            echo "Showing dynamic inventory graph…"
+            ansible-inventory -i inventory_ssm.aws_ec2.yml --graph
+          '''
+        }
+      }
+    }
+
+    stage('Ansible: Install Elasticsearch & Kibana') {
+      when {
+        expression { params.ACTION == 'build' }
+      }
+      steps {
+         dir("${ANS_DIR}") {
+            sh '''
+              . .venv/bin/activate
+              export AWS_REGION=${AWS_REGION}
+              export ANSIBLE_HOST_KEY_CHECKING=False
+              echo "Running playbook against tag_monitoring_true…"
+              ansible-playbook -i inventory_ssm.aws_ec2.yml playbook.yml \
+                --ssh-extra-args "-F ${SSH_CONFIG}" 
+            '''
+          }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "Action '${params.ACTION}' completed successfully!"
+      mail to: 'ps191701@gmail.com',
+           subject: "Jenkins Pipeline SUCCESS: ${currentBuild.fullDisplayName}",
+           body: "Hello,\n\nThe pipeline has completed successfully.\nAction: ${params.ACTION}\nJob: ${env.JOB_NAME}\nBuild Number: ${env.BUILD_NUMBER}\n\nRegards,\nJenkins"
+    }
+    failure {
+      echo "Pipeline failed during '${params.ACTION}'"
+      mail to: 'ps191701@gmail.com',
+           subject: "Jenkins Pipeline FAILURE: ${currentBuild.fullDisplayName}",
+           body: "Hello,\n\nThe pipeline has failed.\nAction: ${params.ACTION}\nJob: ${env.JOB_NAME}\nBuild Number: ${env.BUILD_NUMBER}\n\nCheck the console output for details.\n\nRegards,\nJenkins"
+    }
+    always {
+      echo 'Cleaning workspace…'
+      cleanWs()
+    }
+  }
+}
