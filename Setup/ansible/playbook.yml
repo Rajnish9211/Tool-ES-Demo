@@ -4,24 +4,23 @@
   become: yes
   gather_facts: false   # disable until Python is available
 
-  vars:
-    ansible_python_interpreter: /usr/bin/python3
-
   pre_tasks:
     - name: Ensure Python3 is installed if missing
       raw: |
-        if ! /usr/bin/env python3 --version &>/dev/null; then
+        if ! command -v python3 >/dev/null 2>&1; then
           if [ -f /etc/os-release ] && grep -qi "Amazon Linux" /etc/os-release; then
-            yum install -y python3
+            sudo yum install -y python3
           elif [ -f /etc/debian_version ]; then
-            apt-get update -y && apt-get install -y python3
+            sudo apt-get update -y && sudo apt-get install -y python3
           fi
         fi
       changed_when: false
-      args:
-        warn: false
 
-    - name: Gather facts after Python installation
+    - name: Set ansible_python_interpreter fact to python3
+      set_fact:
+        ansible_python_interpreter: /usr/bin/python3
+
+    - name: Gather facts after Python is ready
       setup:
 
   roles:
