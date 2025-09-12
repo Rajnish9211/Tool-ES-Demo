@@ -1,7 +1,14 @@
 output "alb_dns" {
-  value = aws_lb.alb.dns_name
+  description = "DNS name of the Application Load Balancer"
+  value       = aws_lb.alb.dns_name
 }
 
-output "target_group_arn" {
-  value = aws_lb_target_group.tg.arn
+output "es_target_group_arn" {
+  description = "Target group ARN for Elasticsearch (9200)"
+  value       = aws_lb_target_group.es_tg.arn
+}
+
+output "kibana_target_group_arn" {
+  description = "Target group ARN for Kibana (5601)"
+  value       = aws_lb_target_group.kibana_tg.arn
 }

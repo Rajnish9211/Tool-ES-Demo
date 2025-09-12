@@ -31,12 +31,15 @@ module "alb" {
 # Target group connects to ALB
 ##############################
 module "asg" {
-  source           = "./modules/asg"
-  private_subnets  = module.vpc.private_subnet_ids
-  sg_id            = module.sg.private_sg_id
-  instance_type    = "t3.small"
-  key_name         = var.key_name
-  target_group_arn = module.alb.target_group_arn
+  source          = "./modules/asg"
+  private_subnets = module.vpc.private_subnet_ids
+  sg_id           = module.sg.private_sg_id
+  instance_type   = "t2.small"
+  key_name        = var.key_name
+  target_group_arns = [
+    module.alb.es_target_group_arn,
+    module.alb.kibana_target_group_arn
+  ]
 }
 
 ##############################
@@ -49,4 +52,3 @@ module "bastion" {
   sg_id         = module.sg.bastion_sg_id
   key_name      = var.key_name
 }
-

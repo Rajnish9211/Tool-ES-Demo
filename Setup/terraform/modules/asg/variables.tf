@@ -18,7 +18,7 @@ variable "key_name" {
   type        = string
 }
 
-variable "target_group_arn" {
-  description = "Target group ARN for the ALB"
-  type        = string
+variable "target_group_arns" {
+  description = "List of target group ARNs for the ALB"
+  type        = list(string)
 }

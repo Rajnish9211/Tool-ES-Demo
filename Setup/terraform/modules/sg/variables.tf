@@ -11,5 +11,5 @@ variable "bastion_sg_name" {
 variable "bastion_ssh_cidr" {
   description = "CIDR allowed to SSH into bastion"
   type        = string
-  default     = "0.0.0.0/0"  # You can change to your IP: "203.x.x.x/32"
+  default     = "0.0.0.0/0"
 }
