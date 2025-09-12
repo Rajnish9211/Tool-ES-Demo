@@ -1,9 +1,9 @@
 terraform {
   backend "s3" {
-    bucket         = "terraf-state-es"
+    bucket         = "terraform-tool-es"
     key            = "terraform/infra.tfstate"
     region         = "ap-south-1"
-    dynamodb_table = "terra-statelocking-es"
+    dynamodb_table = "state-tool-elasticsearch"
     encrypt        = true
   }
 }

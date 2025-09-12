@@ -34,7 +34,7 @@ module "asg" {
   source           = "./modules/asg"
   private_subnets  = module.vpc.private_subnet_ids
   sg_id            = module.sg.private_sg_id
-  instance_type    = "t3.medium"
+  instance_type    = "t3.small"
   key_name         = var.key_name
   target_group_arn = module.alb.target_group_arn
 }
