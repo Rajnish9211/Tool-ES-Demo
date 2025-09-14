@@ -1,0 +1,68 @@
+Basic Questions (Concept Building)
+
+Elasticsearch kya hai?
+👉 Search + analytics engine, distributed, JSON-based, full-text search.
+
+Index, Document aur Field kya hote hain?
+👉 Index = DB, Document = Row, Field = Column.
+
+Shard aur Replica kya hote hain?
+👉 Shard = Data ka partition. Replica = us shard ka copy (backup + read scalability).
+
+Master Node ka role kya hai?
+👉 Cluster state manage karta h, shard allocation, node joining, indexing ka coordination.
+
+Data Node ka role kya hai?
+👉 Actual data store karta hai aur queries execute karta hai.
+
+Structured vs Unstructured Data Elasticsearch kaise handle karta hai?
+👉 Structured → fields mapping; Unstructured → analyzer + inverted index (tokenization).
+
+🔹 Intermediate Questions (Production Oriented)
+
+Agar ek shard down ho jaye to kya hoga?
+👉 Replica shard se serve hoga; master reallocate karega new node pe.
+
+Agar master node down ho jaye to kya hota hai?
+👉 New master elect hota hai sirf un nodes me jinke paas master-eligible = true hai.
+
+Application Load Balancer vs Network Load Balancer Elasticsearch ke liye?
+👉 ALB = Path-based / HTTP traffic.
+👉 NLB = TCP/UDP level, latency kam, raw traffic.
+Elasticsearch = REST API (HTTP/JSON) → ALB prefer.
+
+Elasticsearch scaling kaise hota hai?
+👉 Horizontally (naye nodes add karke), Shards distribute hoke performance improve hota hai.
+
+Search kaise fast hoti hai?
+👉 Inverted Index, Analyzers, Tokenization, Caching.
+
+Analyzer kya hota hai?
+👉 Text ko todta hai tokens me (lowercase, remove stop words, stemming).
+
+🔹 Advanced Questions (Real-Time Scenarios)
+
+Agar pura cluster down ho jaye to data kaise recover karoge?
+👉 Snapshots (S3, HDFS, remote storage) → Restore.
+
+Disaster Recovery (DR) ke options kaunse hain?
+👉 Snapshots (cheap, delayed), CCR (expensive, real-time), Multi-AZ.
+
+Cross Cluster Replication (CCR) costly kyun hai?
+👉 Do clusters run karne padte hain + data transfer charges.
+
+ASG (Auto Scaling Group) Elasticsearch ke liye kyun?
+👉 Node failure → automatic replacement, load change → auto scale.
+
+Tu sirf ASG use karega ya CCR bhi?
+👉 Normal clients ke liye ASG + Snapshots. Mission-critical apps ke liye ASG + CCR.
+
+Hot-Warm architecture kya hota hai?
+👉 Hot nodes (fast SSD, recent data) + Warm nodes (cheap HDD, old data).
+
+Elasticsearch me security kaise implement karoge?
+👉 TLS/SSL, X-Pack Security, Role-based access, IP whitelisting, API keys.
+
+Elasticsearch aur RDBMS me difference?
+👉 RDBMS = row-column, strict schema, joins.
+👉 Elasticsearch = JSON docs, schema-flexible, distributed, full-text search.
